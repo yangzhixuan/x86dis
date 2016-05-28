@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "./common.h"
 #include "./x86dis.h"
 
 // following tokens are not part of interface. they are specific to decoder
@@ -366,6 +365,8 @@ static opcode mapext[] = {
 
 #define MOD(a) (((a)&0xc0)>>6)
 #define REG(a) (((a)&0x38)>>3)
+// 00111000
+// 01001101
 #define RM(a) ((a)&0x07)
 
 // internal decoding state for one instruction
@@ -386,7 +387,7 @@ typedef struct {
 static void decopr(x86_opr *out, decstruct *d, u4 o) {
 	u4 t = OPRTOK(o);
 
-	if(ISREG(o)) {
+	if(ISREG(t)) {
 isreg:
 		if(t < ES) { // gpr
 			int s = GETTYPE(o);
@@ -467,8 +468,8 @@ int x86dis(x86_inst *ins, u1 *p, bool bits32) {
 			case X86_PREFIX_OPROVR:	d.opr32 = !d.opr32;; break;
 			case X86_PREFIX_ADROVR:	d.adr32 = !d.adr32; break;
 			case X86_PREFIX_REPE: case X86_PREFIX_REPNE:
-						ins->prefix = o->t;
-						break;
+									ins->prefix = o->t;
+									break;
 			default: break;
 		}
 		if(o->t == X86_PREFIX_0F) o = &map0f[*d.q++];
@@ -511,8 +512,9 @@ int x86dis(x86_inst *ins, u1 *p, bool bits32) {
 						d.mem.scale = 2<<MOD(sib);
 					}
 					d.mem.base = RM(sib)+eAX;
-				} else if(mod || rm != 5)
-					d.mem.base = reg+eAX;
+				} else if(mod || rm != 5) {
+					d.mem.base = rm+eAX;
+				}
 
 				if(mod == 1) {
 					d.mem.disp.val = *d.q++;
@@ -551,7 +553,7 @@ int x86dis(x86_inst *ins, u1 *p, bool bits32) {
 							d.mem.base = BX;
 							d.mem.index = SI;
 							break;
-						case 1: // [BX+SI]
+						case 1: // [BX+DI]
 							d.mem.base = BX;
 							d.mem.index = DI;
 							break;
@@ -621,9 +623,8 @@ int x86dis(x86_inst *ins, u1 *p, bool bits32) {
 				break;
 		}
 		/*if(strcmp(o->m, "lea")) {
-
-		}	
-		else*/;
+		  }	
+		  else*/;
 	} else if(d.o1) {
 		decopr(&ins->argv[0], &d, d.o1);
 		if(d.o2) {
@@ -667,76 +668,76 @@ char *val2dec(char *b, x86_val *val) {
 static char *opr2mnemo(char *buf, x86_opr *o, bool att) {
 	char *r = buf;
 	switch(o->tok) {
-	case X86_OREG:
-		sprintf(r, att ? "%%%s" : "%s", reglut[o->reg]);
-		break;
-	case X86_OMEM: {
-		char d[20], scale[5], sob[5];
-		char *disp = o->mem.disp.val ? val2dec(d, &o->mem.disp) : 0;
-		char *base = o->mem.base ? reglut[o->mem.base] : 0;
-		char *index = o->mem.index ? reglut[o->mem.index] : 0;
-		char *so = "";
-		if(o->mem.scale) sprintf(scale, att ? ",%d" : "*%d", o->mem.scale);
-		else *scale = 0;
-		if(o->mem.seg != DS || o->mem.base == BP) {
-			so = o->mem.seg ? reglut[o->mem.seg] : "";
-			if(att) {
-				sprintf(sob, "%%%s:", so);
-				so = sob;
-			} else {
-				sprintf(sob, "%s:", so);
-				so = sob;
-			}
-		}
-		if(att) { // AT&T notation
-			if(disp) {
-				if(base) {
-					if(index) sprintf(r, "%s%s(%%%s,%%%s%s)", so, disp, base,
-							index, scale);
-					else sprintf(r, "%s%s(%%%s)", so, disp, base);
-				} else {
-					if(index) sprintf(r, "%s%s(,%%%s%s)", so, disp, index, scale);
-					else sprintf(r, "%s%s", so, disp);
-				}
-			} else {
-				if(base) {
-					if(index) sprintf(r, "%s(%%%s,%%%s%s)", so, base, index, scale);
-					else sprintf(r, "%s(%%%s)", so, base);
-				} else {
-					if(index) sprintf(r, "%s(,%%%s%s)", so, index, scale);
-					else sprintf(r, "%s0", so);
-				}
-			}
-		}
-		else { // Intel notation
-			if(disp) {
-				if(base) {
-					if(index) sprintf(r, "[%s%s+%s%s+%s]", so, base, index, scale, disp);
-					else sprintf(r, "[%s%s+%s]", so, base, disp);
-				} else {
-					if(index) sprintf(r, "[%s%s%s+%s]", so, index, scale, disp);
-					else sprintf(r, "[%s%s]", so, disp);
-				}
-			} else {
-				if(base) {
-					if(index) sprintf(r, "[%s%s+%s%s]", so, base, index, scale);
-					else sprintf(r, "[%s%s]", so, base);
-				} else {
-					if(index) sprintf(r, "[%s%s%s]", so, index, scale);
-					else sprintf(r, "[%s0]", so);
-				}
-			}
-		}
-		break;
-		}
-	case X86_OVAL: {
-		char d[20];
-		sprintf(r, "%s%s", att ? "$" : "", val2dec(d, &o->val));
-		break;
-	}
-	default:
-		sprintf(r, "<invalid>");
-		break;
+		case X86_OREG:
+			sprintf(r, att ? "%%%s" : "%s", reglut[o->reg]);
+			break;
+		case X86_OMEM: {
+						   char d[20], scale[5], sob[5];
+						   char *disp = o->mem.disp.val ? val2dec(d, &o->mem.disp) : 0;
+						   char *base = o->mem.base ? reglut[o->mem.base] : 0;
+						   char *index = o->mem.index ? reglut[o->mem.index] : 0;
+						   char *so = "";
+						   if(o->mem.scale) sprintf(scale, att ? ",%d" : "*%d", o->mem.scale);
+						   else *scale = 0;
+						   if(o->mem.seg != DS || o->mem.base == BP) {
+							   so = o->mem.seg ? reglut[o->mem.seg] : "";
+							   if(att) {
+								   sprintf(sob, "%%%s:", so);
+								   so = sob;
+							   } else {
+								   sprintf(sob, "%s:", so);
+								   so = sob;
+							   }
+						   }
+						   if(att) { // AT&T notation
+							   if(disp) {
+								   if(base) {
+									   if(index) sprintf(r, "%s%s(%%%s,%%%s%s)", so, disp, base,
+											   index, scale);
+									   else sprintf(r, "%s%s(%%%s)", so, disp, base);
+								   } else {
+									   if(index) sprintf(r, "%s%s(,%%%s%s)", so, disp, index, scale);
+									   else sprintf(r, "%s%s", so, disp);
+								   }
+							   } else {
+								   if(base) {
+									   if(index) sprintf(r, "%s(%%%s,%%%s%s)", so, base, index, scale);
+									   else sprintf(r, "%s(%%%s)", so, base);
+								   } else {
+									   if(index) sprintf(r, "%s(,%%%s%s)", so, index, scale);
+									   else sprintf(r, "%s0", so);
+								   }
+							   }
+						   }
+						   else { // Intel notation
+							   if(disp) {
+								   if(base) {
+									   if(index) sprintf(r, "[%s%s+%s%s+%s]", so, base, index, scale, disp);
+									   else sprintf(r, "[%s%s+%s]", so, base, disp);
+								   } else {
+									   if(index) sprintf(r, "[%s%s%s+%s]", so, index, scale, disp);
+									   else sprintf(r, "[%s%s]", so, disp);
+								   }
+							   } else {
+								   if(base) {
+									   if(index) sprintf(r, "[%s%s+%s%s]", so, base, index, scale);
+									   else sprintf(r, "[%s%s]", so, base);
+								   } else {
+									   if(index) sprintf(r, "[%s%s%s]", so, index, scale);
+									   else sprintf(r, "[%s0]", so);
+								   }
+							   }
+						   }
+						   break;
+					   }
+		case X86_OVAL: {
+						   char d[20];
+						   sprintf(r, "%s%s", att ? "$" : "", val2dec(d, &o->val));
+						   break;
+					   }
+		default:
+					   sprintf(r, "<invalid>");
+					   break;
 	}
 
 	return r;
@@ -783,4 +784,3 @@ void x86init() {
 		setup_o(map0f+i);
 	}
 }
-

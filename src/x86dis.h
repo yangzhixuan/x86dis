@@ -218,11 +218,10 @@ typedef enum {
 
 #define X86_DIS_NH		-1
 
-// decodes one x86 instruction into 'ins' and returns its size
 void x86init(); // setup local opcode tables
+// decodes one x86 instruction into 'ins' and returns its size
 int x86dis(x86_inst *ins, u1 *p, bool bits32);
 // converts x86_inst to mnemonic
 char *x86mnemonize(char *out, x86_inst *inst, bool att);
 
 #endif
-
